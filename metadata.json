@@ -1,0 +1,7 @@
+{
+  "name": "LFYHub - Lifeline For You",
+  "description": "A premium real-time blood donation platform connecting donors and recipients instantly. Features emergency mode, location-based matching, and real-time availability tracking.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
