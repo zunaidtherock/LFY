@@ -20,7 +20,7 @@ try {
       email TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
       blood_group TEXT NOT NULL,
-      phone TEXT,
+      phone TEXT UNIQUE,
       profile_photo TEXT,
       total_donations INTEGER DEFAULT 0,
       availability INTEGER DEFAULT 1,
@@ -30,6 +30,22 @@ try {
     );
   `);
   
+  // Ensure phone is unique (for older databases)
+  try {
+    // First, remove any existing duplicates to allow index creation
+    db.exec(`
+      DELETE FROM users 
+      WHERE id NOT IN (
+        SELECT MIN(id) 
+        FROM users 
+        GROUP BY phone
+      ) AND phone IS NOT NULL;
+    `);
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone ON users(phone);");
+  } catch (e) {
+    console.log("Unique index on phone could not be created (likely already exists):", e);
+  }
+
   // Ensure last_donation_date column exists (for older databases)
   const tableInfo = db.prepare("PRAGMA table_info(users)").all() as any[];
   const hasLastDonationDate = tableInfo.some(col => col.name === 'last_donation_date');
@@ -64,6 +80,16 @@ try {
       message TEXT NOT NULL,
       related_id INTEGER, -- e.g., request_id
       is_read INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id)
+    );
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS donations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      donation_date TEXT NOT NULL,
+      hospital_name TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(user_id) REFERENCES users(id)
     );
@@ -129,9 +155,16 @@ async function startServer() {
         "INSERT INTO users (name, email, password, blood_group, phone) VALUES (?, ?, ?, ?, ?)"
       );
       const result = stmt.run(name, email, password, blood_group, phone);
-      res.json({ id: result.lastInsertRowid, name, email, blood_group, phone });
+      broadcastStats(); // Update stats immediately after new donor joins
+      res.json({ id: result.lastInsertRowid, name, email, blood_group, phone, availability: 1, total_donations: 0 });
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      if (error.message.includes("UNIQUE constraint failed: users.email")) {
+        res.status(400).json({ error: "This email is already registered. Please login instead." });
+      } else if (error.message.includes("UNIQUE constraint failed: users.phone")) {
+        res.status(400).json({ error: "This phone number is already registered. Please login instead." });
+      } else {
+        res.status(400).json({ error: "Signup failed. Please check your details." });
+      }
     }
   });
 
@@ -186,11 +219,21 @@ async function startServer() {
   });
 
   app.post("/api/users/update-donation", (req, res) => {
-    const { id, last_donation_date } = req.body;
+    const { id, last_donation_date, hospital_name } = req.body;
     try {
       db.prepare("UPDATE users SET last_donation_date = ?, total_donations = total_donations + 1 WHERE id = ?").run(last_donation_date, id);
+      db.prepare("INSERT INTO donations (user_id, donation_date, hospital_name) VALUES (?, ?, ?)").run(id, last_donation_date, hospital_name || 'Nearby Hospital');
       broadcastStats();
       res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  app.get("/api/users/:id/donations", (req, res) => {
+    try {
+      const donations = db.prepare("SELECT * FROM donations WHERE user_id = ? ORDER BY donation_date DESC").all(req.params.id);
+      res.json(donations);
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }

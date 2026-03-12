@@ -225,12 +225,13 @@ const AuthPage = ({ onLoginSuccess }: { onLoginSuccess: (user: UserType) => void
                 <form onSubmit={handleSubmit} className="space-y-4">
                   {mode === 'signup' && (
                     <div className="relative">
-                      <User className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
+                      <User className="absolute left-3 top-3.5 w-5 h-5 text-gray-400 pointer-events-none" />
                       <input 
                         type="text"
+                        name="name"
                         placeholder="Full Name"
                         required
-                        className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                        className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-gray-800"
                         value={formData.name}
                         onChange={e => setFormData({...formData, name: e.target.value})}
                       />
@@ -239,12 +240,13 @@ const AuthPage = ({ onLoginSuccess }: { onLoginSuccess: (user: UserType) => void
 
                   {(mode === 'signup' || mode === 'forgot') && (
                     <div className="relative">
-                      <Phone className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
+                      <Phone className="absolute left-3 top-3.5 w-5 h-5 text-gray-400 pointer-events-none" />
                       <input 
                         type="tel"
+                        name="phone"
                         placeholder="Phone Number"
                         required
-                        className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                        className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-gray-800"
                         value={formData.phone}
                         onChange={e => setFormData({...formData, phone: e.target.value})}
                       />
@@ -253,9 +255,10 @@ const AuthPage = ({ onLoginSuccess }: { onLoginSuccess: (user: UserType) => void
 
                   {mode === 'signup' && (
                     <div className="relative">
-                      <Droplets className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
+                      <Droplets className="absolute left-3 top-3.5 w-5 h-5 text-gray-400 pointer-events-none" />
                       <select 
-                        className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all appearance-none"
+                        name="blood_group"
+                        className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all appearance-none text-gray-800"
                         value={formData.blood_group}
                         onChange={e => setFormData({...formData, blood_group: e.target.value})}
                       >
@@ -265,24 +268,27 @@ const AuthPage = ({ onLoginSuccess }: { onLoginSuccess: (user: UserType) => void
                   )}
 
                   <div className="relative">
-                    <Mail className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
+                    <Mail className="absolute left-3 top-3.5 w-5 h-5 text-gray-400 pointer-events-none" />
                     <input 
                       type="email"
+                      name="email"
+                      autoComplete="email"
                       placeholder="Email Address"
                       required
-                      className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                      className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-gray-800"
                       value={formData.email}
                       onChange={e => setFormData({...formData, email: e.target.value})}
                     />
                   </div>
 
                   <div className="relative">
-                    <Lock className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
+                    <Lock className="absolute left-3 top-3.5 w-5 h-5 text-gray-400 pointer-events-none" />
                     <input 
                       type={showPassword ? "text" : "password"}
+                      name="password"
                       placeholder={mode === 'forgot' ? "New Password" : "Password"}
                       required
-                      className="w-full pl-11 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                      className="w-full pl-11 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-gray-800"
                       value={formData.password}
                       onChange={e => setFormData({...formData, password: e.target.value})}
                     />
@@ -297,12 +303,13 @@ const AuthPage = ({ onLoginSuccess }: { onLoginSuccess: (user: UserType) => void
 
                   {(mode === 'signup' || mode === 'forgot') && (
                     <div className="relative">
-                      <Lock className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
+                      <Lock className="absolute left-3 top-3.5 w-5 h-5 text-gray-400 pointer-events-none" />
                       <input 
                         type="password"
+                        name="confirmPassword"
                         placeholder="Confirm Password"
                         required
-                        className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                        className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all text-gray-800"
                         value={formData.confirmPassword}
                         onChange={e => setFormData({...formData, confirmPassword: e.target.value})}
                       />
@@ -394,9 +401,10 @@ const Dashboard = ({ user, onLogout }: { user: UserType, onLogout: () => void })
   const [loading, setLoading] = useState(false);
   const [location, setLocation] = useState<{lat: number, lng: number} | null>(null);
   const [stats, setStats] = useState({ total: 0, available: 0 });
-  const [view, setView] = useState<'home' | 'results'>('home');
+  const [view, setView] = useState<'home' | 'results' | 'history'>('home');
   const [locationStatus, setLocationStatus] = useState<'idle' | 'requesting' | 'granted' | 'denied'>('idle');
   const [lastDonation, setLastDonation] = useState<string | undefined>(user.last_donation_date);
+  const [donationHistory, setDonationHistory] = useState<any[]>([]);
   const socketRef = useRef<Socket | null>(null);
 
   const fetchStats = async () => {
@@ -472,9 +480,20 @@ const Dashboard = ({ user, onLogout }: { user: UserType, onLogout: () => void })
     }
   };
 
+  const fetchDonationHistory = async () => {
+    try {
+      const res = await fetch(`/api/users/${user.id}/donations`);
+      const data = await res.json();
+      setDonationHistory(data);
+    } catch (err) {
+      console.error("History fetch error", err);
+    }
+  };
+
   useEffect(() => {
     fetchStats();
     fetchNotifications();
+    fetchDonationHistory();
     updateLocation();
 
     // Initialize Socket.io
@@ -585,6 +604,7 @@ const Dashboard = ({ user, onLogout }: { user: UserType, onLogout: () => void })
       });
       if (res.ok) {
         setLastDonation(today);
+        fetchDonationHistory();
         alert("Thank you for your donation! Your record has been updated.");
         fetchStats();
       }
@@ -632,6 +652,60 @@ const Dashboard = ({ user, onLogout }: { user: UserType, onLogout: () => void })
       }
     }
   };
+
+  if (view === 'history') {
+    return (
+      <div className="min-h-screen sky-bg flex flex-col items-center py-10 px-4 relative">
+        <button 
+          onClick={() => setView('home')}
+          className="absolute top-6 left-6 flex items-center gap-2 px-4 py-2 bg-white rounded-full soft-shadow text-[#2B6CB0] font-bold hover:scale-105 transition-transform border border-gray-100 z-10"
+        >
+          <ArrowRight className="w-5 h-5 rotate-180" />
+          Back
+        </button>
+
+        <div className="w-full max-w-lg space-y-6 mt-12">
+          <div className="text-center mb-8">
+            <h2 className="text-3xl font-black text-[#2D3748]">Donation History</h2>
+            <p className="text-gray-500 font-bold">Your life-saving contributions</p>
+          </div>
+
+          <div className="space-y-4">
+            {donationHistory.length > 0 ? (
+              donationHistory.map((donation, idx) => (
+                <motion.div 
+                  key={donation.id || idx}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: idx * 0.1 }}
+                  className="bg-white p-6 rounded-3xl soft-shadow border border-emerald-100 flex items-center gap-4"
+                >
+                  <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-black text-gray-900">{donation.hospital_name || 'Nearby Hospital'}</h4>
+                    <p className="text-sm text-gray-500 font-medium">Recorded on {new Date(donation.donation_date).toLocaleDateString()}</p>
+                  </div>
+                  <div className="ml-auto text-right">
+                    <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full uppercase">Verified</span>
+                  </div>
+                </motion.div>
+              ))
+            ) : (
+              <div className="bg-white py-16 rounded-3xl text-center soft-shadow border border-gray-100">
+                <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Heart className="w-10 h-10 text-gray-300" />
+                </div>
+                <h3 className="text-xl font-bold text-gray-800 mb-2">No History Yet</h3>
+                <p className="text-gray-400 font-medium px-8">Start your journey by donating blood and saving lives today!</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (view === 'results') {
     return (
@@ -981,6 +1055,16 @@ const Dashboard = ({ user, onLogout }: { user: UserType, onLogout: () => void })
                     <Phone className="w-5 h-5 text-gray-400" />
                     <span className="font-bold text-lg">{user.phone}</span>
                   </div>
+                  <button 
+                    onClick={() => {
+                      setShowProfile(false);
+                      setView('history');
+                    }}
+                    className="w-full py-4 bg-gray-50 text-gray-700 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-gray-100 transition-colors border border-gray-100"
+                  >
+                    <Clock className="w-5 h-5 text-gray-400" />
+                    VIEW DONATION HISTORY
+                  </button>
                   <button 
                     onClick={onLogout}
                     className="w-full py-4 bg-gray-100 hover:bg-red-50 hover:text-red-600 text-gray-600 rounded-2xl font-black text-lg transition-all flex items-center justify-center gap-2"
