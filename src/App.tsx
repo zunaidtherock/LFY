@@ -90,19 +90,28 @@ const AuthPage = ({ onLoginSuccess }: { onLoginSuccess: (user: UserType) => void
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       });
-      const data = await response.json();
-      if (response.ok) {
-        if (mode === 'forgot') {
-          setSuccess("Password reset successful! You can now login.");
-          setMode('login');
+      
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const data = await response.json();
+        if (response.ok) {
+          if (mode === 'forgot') {
+            setSuccess("Password reset successful! You can now login.");
+            setMode('login');
+          } else {
+            onLoginSuccess(data);
+          }
         } else {
-          onLoginSuccess(data);
+          setError(data.error || 'Operation failed');
         }
       } else {
-        setError(data.error || 'Operation failed');
+        const text = await response.text();
+        console.error('Non-JSON response:', text);
+        setError(`Server error: ${response.status}. Please try again.`);
       }
-    } catch (err) {
-      setError('Connection error');
+    } catch (err: any) {
+      console.error('Fetch error:', err);
+      setError(`Connection error: ${err.message || 'Check your internet connection'}`);
     } finally {
       setLoading(false);
     }

@@ -5,6 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { createServer } from "http";
 import { Server } from "socket.io";
+import cors from "cors";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -112,7 +113,10 @@ async function startServer() {
   });
   const PORT = 3000;
 
+  app.use(cors());
   app.use(express.json());
+
+  console.log(`Starting server in ${process.env.NODE_ENV || 'development'} mode`);
 
   // Socket.io Logic
   io.on("connection", (socket) => {
@@ -341,6 +345,12 @@ async function startServer() {
       console.error("Stats API error:", err);
       res.status(500).json({ error: "Failed to fetch stats" });
     }
+  });
+
+  // Error Handler
+  app.use((err: any, req: any, res: any, next: any) => {
+    console.error('Unhandled error:', err);
+    res.status(500).json({ error: 'Internal server error', details: err.message });
   });
 
   // Vite middleware for development
