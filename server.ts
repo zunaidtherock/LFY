@@ -116,6 +116,11 @@ async function startServer() {
     }
   };
 
+  // API routes
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
   // Auth Routes
   app.post("/api/auth/signup", (req, res) => {
     const { name, email, password, blood_group, phone } = req.body;
@@ -132,11 +137,15 @@ async function startServer() {
 
   app.post("/api/auth/login", (req, res) => {
     const { email, password } = req.body;
-    const user = db.prepare("SELECT * FROM users WHERE email = ? AND password = ?").get(email, password) as any;
-    if (user) {
-      res.json(user);
-    } else {
-      res.status(401).json({ error: "Invalid credentials" });
+    try {
+      const user = db.prepare("SELECT * FROM users WHERE email = ? AND password = ?").get(email, password) as any;
+      if (user) {
+        res.json(user);
+      } else {
+        res.status(401).json({ error: "Invalid credentials" });
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
     }
   });
 
@@ -299,13 +308,14 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    app.use(express.static(path.join(__dirname, "dist")));
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
     app.get("*", (req, res) => {
-      res.sendFile(path.join(__dirname, "dist", "index.html"));
+      res.sendFile(path.join(distPath, "index.html"));
     });
   }
 
-  httpServer.listen(PORT, "0.0.0.0", () => {
+  const server = httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }
