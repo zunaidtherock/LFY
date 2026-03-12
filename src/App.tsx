@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { io, Socket } from 'socket.io-client';
 import { 
   Mail, 
   Lock, 
@@ -24,7 +25,7 @@ import {
   Clock,
   Navigation
 } from 'lucide-react';
-import { BLOOD_GROUPS, User as UserType, Notification } from './types';
+import { BLOOD_GROUPS, User as UserType, AppNotification } from './types';
 
 // --- Components ---
 
@@ -388,7 +389,7 @@ const Dashboard = ({ user, onLogout }: { user: UserType, onLogout: () => void })
   const [isEmergency, setIsEmergency] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [availability, setAvailability] = useState(user.availability === 1);
   const [loading, setLoading] = useState(false);
   const [location, setLocation] = useState<{lat: number, lng: number} | null>(null);
@@ -396,6 +397,7 @@ const Dashboard = ({ user, onLogout }: { user: UserType, onLogout: () => void })
   const [view, setView] = useState<'home' | 'results'>('home');
   const [locationStatus, setLocationStatus] = useState<'idle' | 'requesting' | 'granted' | 'denied'>('idle');
   const [lastDonation, setLastDonation] = useState<string | undefined>(user.last_donation_date);
+  const socketRef = useRef<Socket | null>(null);
 
   const fetchStats = async () => {
     try {
@@ -473,12 +475,40 @@ const Dashboard = ({ user, onLogout }: { user: UserType, onLogout: () => void })
   useEffect(() => {
     fetchStats();
     fetchNotifications();
-    const interval = setInterval(() => {
-      fetchStats();
-      fetchNotifications();
-    }, 10000); // Update every 10s
     updateLocation();
-    return () => clearInterval(interval);
+
+    // Initialize Socket.io
+    const socket = io();
+    socketRef.current = socket;
+
+    socket.on("connect", () => {
+      console.log("Connected to real-time server");
+      socket.emit("join", user.id);
+    });
+
+    socket.on("stats_update", (newStats) => {
+      setStats(newStats);
+    });
+
+    socket.on("new_notification", (notification: AppNotification) => {
+      setNotifications(prev => [notification, ...prev]);
+      // Optional: Show a browser notification or a custom toast
+      if (window.Notification && window.Notification.permission === "granted") {
+        new window.Notification(notification.title, {
+          body: notification.message,
+          icon: "/favicon.ico"
+        });
+      }
+    });
+
+    // Request notification permission
+    if ("Notification" in window && window.Notification.permission === "default") {
+      window.Notification.requestPermission();
+    }
+
+    return () => {
+      socket.disconnect();
+    };
   }, []);
 
   useEffect(() => {

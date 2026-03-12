@@ -3,6 +3,8 @@ import { createServer as createViteServer } from "vite";
 import Database from "better-sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
+import { createServer } from "http";
+import { Server } from "socket.io";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -75,9 +77,44 @@ try {
 
 async function startServer() {
   const app = express();
+  const httpServer = createServer(app);
+  const io = new Server(httpServer, {
+    cors: {
+      origin: "*",
+      methods: ["GET", "POST"]
+    }
+  });
   const PORT = 3000;
 
   app.use(express.json());
+
+  // Socket.io Logic
+  io.on("connection", (socket) => {
+    console.log("User connected:", socket.id);
+
+    socket.on("join", (userId) => {
+      socket.join(`user_${userId}`);
+      console.log(`User ${userId} joined their private room`);
+    });
+
+    socket.on("disconnect", () => {
+      console.log("User disconnected:", socket.id);
+    });
+  });
+
+  // Helper to broadcast stats
+  const broadcastStats = () => {
+    try {
+      const total = db.prepare("SELECT COUNT(*) as count FROM users").get() as { count: number };
+      const available = db.prepare("SELECT COUNT(*) as count FROM users WHERE availability = 1").get() as { count: number };
+      io.emit("stats_update", {
+        total: total?.count || 0,
+        available: available?.count || 0
+      });
+    } catch (err) {
+      console.error("Broadcast stats error:", err);
+    }
+  };
 
   // Auth Routes
   app.post("/api/auth/signup", (req, res) => {
@@ -135,6 +172,7 @@ async function startServer() {
   app.post("/api/users/toggle-availability", (req, res) => {
     const { id, availability } = req.body;
     db.prepare("UPDATE users SET availability = ? WHERE id = ?").run(availability ? 1 : 0, id);
+    broadcastStats();
     res.json({ success: true });
   });
 
@@ -142,6 +180,7 @@ async function startServer() {
     const { id, last_donation_date } = req.body;
     try {
       db.prepare("UPDATE users SET last_donation_date = ?, total_donations = total_donations + 1 WHERE id = ?").run(last_donation_date, id);
+      broadcastStats();
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -210,12 +249,20 @@ async function startServer() {
         );
 
         donors.forEach(donor => {
-          notifyStmt.run(
-            donor.id,
-            "🚨 EMERGENCY REQUEST",
-            `Urgent ${blood_group} needed at ${hospital_name || 'nearby hospital'}.`,
-            requestId
-          );
+          const title = "🚨 EMERGENCY REQUEST";
+          const message = `Urgent ${blood_group} needed at ${hospital_name || 'nearby hospital'}.`;
+          
+          notifyStmt.run(donor.id, title, message, requestId);
+          
+          // Real-time socket notification
+          io.to(`user_${donor.id}`).emit("new_notification", {
+            type: 'emergency',
+            title,
+            message,
+            related_id: requestId,
+            created_at: new Date().toISOString(),
+            is_read: 0
+          });
         });
       }
 
@@ -258,7 +305,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }

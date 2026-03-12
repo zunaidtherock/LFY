@@ -14,7 +14,7 @@ export interface User {
   last_donation_date?: string;
 }
 
-export interface Notification {
+export interface AppNotification {
   id: number;
   user_id: number;
   type: 'emergency' | 'eligibility' | 'info';
