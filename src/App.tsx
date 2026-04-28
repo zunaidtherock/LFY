@@ -520,12 +520,19 @@ const Dashboard = ({ user, onLogout }: { user: UserType, onLogout: () => void })
 
     socket.on("new_notification", (notification: AppNotification) => {
       setNotifications(prev => [notification, ...prev]);
-      // Optional: Show a browser notification or a custom toast
+      
+      // Show a browser notification
       if (window.Notification && window.Notification.permission === "granted") {
-        new window.Notification(notification.title, {
-          body: notification.message,
-          icon: "/favicon.ico"
-        });
+        try {
+          new window.Notification(notification.title, {
+            body: notification.message,
+            icon: "/favicon.ico",
+            tag: notification.type + '-' + notification.id,
+            requireInteraction: notification.type === 'emergency'
+          });
+        } catch (e) {
+          console.error("Notification error", e);
+        }
       }
     });
 

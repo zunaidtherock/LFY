@@ -1,5 +1,4 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import Database from "better-sqlite3";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -10,7 +9,8 @@ import cors from "cors";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const db = new Database("lfyhub.db");
+const dbPath = process.env.VERCEL ? "/tmp/lfyhub.db" : "lfyhub.db";
+const db = new Database(dbPath);
 
 // Initialize Database
 try {
@@ -102,270 +102,288 @@ try {
   console.error("Database initialization error:", err);
 }
 
-async function startServer() {
-  const app = express();
-  const httpServer = createServer(app);
-  const io = new Server(httpServer, {
-    cors: {
-      origin: "*",
-      methods: ["GET", "POST"]
-    }
+const app = express();
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
+
+app.use(cors());
+app.use(express.json());
+
+// Socket.io Logic
+io.on("connection", (socket) => {
+  console.log("User connected:", socket.id);
+
+  socket.on("join", (userId) => {
+    socket.join(`user_${userId}`);
+    console.log(`User ${userId} joined their private room`);
   });
-  const PORT = 3000;
 
-  app.use(cors());
-  app.use(express.json());
+  socket.on("disconnect", () => {
+    console.log("User disconnected:", socket.id);
+  });
+});
 
-  console.log(`Starting server in ${process.env.NODE_ENV || 'development'} mode`);
-
-  // Socket.io Logic
-  io.on("connection", (socket) => {
-    console.log("User connected:", socket.id);
-
-    socket.on("join", (userId) => {
-      socket.join(`user_${userId}`);
-      console.log(`User ${userId} joined their private room`);
+// Helper to broadcast stats
+const broadcastStats = () => {
+  try {
+    const total = db.prepare("SELECT COUNT(*) as count FROM users").get() as { count: number };
+    const available = db.prepare("SELECT COUNT(*) as count FROM users WHERE availability = 1").get() as { count: number };
+    io.emit("stats_update", {
+      total: total?.count || 0,
+      available: available?.count || 0
     });
+  } catch (err) {
+    console.error("Broadcast stats error:", err);
+  }
+};
 
-    socket.on("disconnect", () => {
-      console.log("User disconnected:", socket.id);
+// API routes
+app.get("/api/health", (req, res) => {
+  try {
+    const userCount = db.prepare("SELECT COUNT(*) as count FROM users").get() as { count: number };
+    res.json({ 
+      status: "ok", 
+      timestamp: new Date().toISOString(),
+      database: "connected",
+      stats: { users: userCount.count },
+      env: process.env.VERCEL ? "vercel" : "development"
     });
-  });
+  } catch (err: any) {
+    res.status(500).json({ 
+      status: "error", 
+      message: "Database connection failed",
+      error: err.message
+    });
+  }
+});
 
-  // Helper to broadcast stats
-  const broadcastStats = () => {
-    try {
-      const total = db.prepare("SELECT COUNT(*) as count FROM users").get() as { count: number };
-      const available = db.prepare("SELECT COUNT(*) as count FROM users WHERE availability = 1").get() as { count: number };
-      io.emit("stats_update", {
-        total: total?.count || 0,
-        available: available?.count || 0
-      });
-    } catch (err) {
-      console.error("Broadcast stats error:", err);
+// Auth Routes
+app.post("/api/auth/signup", (req, res) => {
+  const { name, email, password, blood_group, phone } = req.body;
+  try {
+    const stmt = db.prepare(
+      "INSERT INTO users (name, email, password, blood_group, phone) VALUES (?, ?, ?, ?, ?)"
+    );
+    const result = stmt.run(name, email, password, blood_group, phone);
+    broadcastStats(); // Update stats immediately after new donor joins
+    res.json({ id: result.lastInsertRowid, name, email, blood_group, phone, availability: 1, total_donations: 0 });
+  } catch (error: any) {
+    if (error.message.includes("UNIQUE constraint failed: users.email")) {
+      res.status(400).json({ error: "This email is already registered. Please login instead." });
+    } else if (error.message.includes("UNIQUE constraint failed: users.phone")) {
+      res.status(400).json({ error: "This phone number is already registered. Please login instead." });
+    } else {
+      res.status(400).json({ error: "Signup failed. Please check your details." });
     }
-  };
+  }
+});
 
-  // API routes
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", timestamp: new Date().toISOString() });
-  });
-
-  // Auth Routes
-  app.post("/api/auth/signup", (req, res) => {
-    const { name, email, password, blood_group, phone } = req.body;
-    try {
-      const stmt = db.prepare(
-        "INSERT INTO users (name, email, password, blood_group, phone) VALUES (?, ?, ?, ?, ?)"
-      );
-      const result = stmt.run(name, email, password, blood_group, phone);
-      broadcastStats(); // Update stats immediately after new donor joins
-      res.json({ id: result.lastInsertRowid, name, email, blood_group, phone, availability: 1, total_donations: 0 });
-    } catch (error: any) {
-      if (error.message.includes("UNIQUE constraint failed: users.email")) {
-        res.status(400).json({ error: "This email is already registered. Please login instead." });
-      } else if (error.message.includes("UNIQUE constraint failed: users.phone")) {
-        res.status(400).json({ error: "This phone number is already registered. Please login instead." });
-      } else {
-        res.status(400).json({ error: "Signup failed. Please check your details." });
-      }
+app.post("/api/auth/login", (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const user = db.prepare("SELECT * FROM users WHERE email = ? AND password = ?").get(email, password) as any;
+    if (user) {
+      res.json(user);
+    } else {
+      res.status(401).json({ error: "Invalid credentials" });
     }
-  });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-  app.post("/api/auth/login", (req, res) => {
-    const { email, password } = req.body;
-    try {
-      const user = db.prepare("SELECT * FROM users WHERE email = ? AND password = ?").get(email, password) as any;
-      if (user) {
-        res.json(user);
-      } else {
-        res.status(401).json({ error: "Invalid credentials" });
-      }
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
+app.post("/api/auth/forgot-password", (req, res) => {
+  const { email, phone, newPassword } = req.body;
+  try {
+    const user = db.prepare("SELECT * FROM users WHERE email = ? AND phone = ?").get(email, phone) as any;
+    if (!user) {
+      return res.status(404).json({ error: "User not found with these details" });
     }
-  });
+    db.prepare("UPDATE users SET password = ? WHERE id = ?").run(newPassword, user.id);
+    res.json({ success: true, message: "Password updated successfully" });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-  app.post("/api/auth/forgot-password", (req, res) => {
-    const { email, phone, newPassword } = req.body;
-    try {
-      const user = db.prepare("SELECT * FROM users WHERE email = ? AND phone = ?").get(email, phone) as any;
-      if (!user) {
-        return res.status(404).json({ error: "User not found with these details" });
-      }
-      db.prepare("UPDATE users SET password = ? WHERE id = ?").run(newPassword, user.id);
-      res.json({ success: true, message: "Password updated successfully" });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
+// User Routes
+app.get("/api/users/search", (req, res) => {
+  const { blood_group, current_user_id } = req.query;
+  const users = db.prepare(
+    "SELECT id, name, phone, blood_group, total_donations, latitude, longitude FROM users WHERE blood_group = ? AND availability = 1 AND id != ?"
+  ).all(blood_group, current_user_id);
+  res.json(users);
+});
 
-  // User Routes
-  app.get("/api/users/search", (req, res) => {
-    const { blood_group, current_user_id } = req.query;
-    const users = db.prepare(
-      "SELECT id, name, phone, blood_group, total_donations, latitude, longitude FROM users WHERE blood_group = ? AND availability = 1 AND id != ?"
-    ).all(blood_group, current_user_id);
-    res.json(users);
-  });
+app.post("/api/users/update-location", (req, res) => {
+  const { id, latitude, longitude } = req.body;
+  db.prepare("UPDATE users SET latitude = ?, longitude = ? WHERE id = ?").run(latitude, longitude, id);
+  res.json({ success: true });
+});
 
-  app.post("/api/users/update-location", (req, res) => {
-    const { id, latitude, longitude } = req.body;
-    db.prepare("UPDATE users SET latitude = ?, longitude = ? WHERE id = ?").run(latitude, longitude, id);
-    res.json({ success: true });
-  });
+app.post("/api/users/toggle-availability", (req, res) => {
+  const { id, availability } = req.body;
+  db.prepare("UPDATE users SET availability = ? WHERE id = ?").run(availability ? 1 : 0, id);
+  broadcastStats();
+  res.json({ success: true });
+});
 
-  app.post("/api/users/toggle-availability", (req, res) => {
-    const { id, availability } = req.body;
-    db.prepare("UPDATE users SET availability = ? WHERE id = ?").run(availability ? 1 : 0, id);
+app.post("/api/users/update-donation", (req, res) => {
+  const { id, last_donation_date, hospital_name } = req.body;
+  try {
+    db.prepare("UPDATE users SET last_donation_date = ?, total_donations = total_donations + 1 WHERE id = ?").run(last_donation_date, id);
+    db.prepare("INSERT INTO donations (user_id, donation_date, hospital_name) VALUES (?, ?, ?)").run(id, last_donation_date, hospital_name || 'Nearby Hospital');
     broadcastStats();
     res.json({ success: true });
-  });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-  app.post("/api/users/update-donation", (req, res) => {
-    const { id, last_donation_date, hospital_name } = req.body;
-    try {
-      db.prepare("UPDATE users SET last_donation_date = ?, total_donations = total_donations + 1 WHERE id = ?").run(last_donation_date, id);
-      db.prepare("INSERT INTO donations (user_id, donation_date, hospital_name) VALUES (?, ?, ?)").run(id, last_donation_date, hospital_name || 'Nearby Hospital');
-      broadcastStats();
-      res.json({ success: true });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
+app.get("/api/users/:id/donations", (req, res) => {
+  try {
+    const donations = db.prepare("SELECT * FROM donations WHERE user_id = ? ORDER BY donation_date DESC").all(req.params.id);
+    res.json(donations);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-  app.get("/api/users/:id/donations", (req, res) => {
-    try {
-      const donations = db.prepare("SELECT * FROM donations WHERE user_id = ? ORDER BY donation_date DESC").all(req.params.id);
-      res.json(donations);
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  // Notification Routes
-  app.get("/api/notifications", (req, res) => {
-    const { user_id } = req.query;
-    
-    // Check for eligibility and auto-generate notification
-    try {
-      const user = db.prepare("SELECT last_donation_date FROM users WHERE id = ?").get(user_id) as any;
-      if (user && user.last_donation_date) {
-        const lastDate = new Date(user.last_donation_date);
-        const today = new Date();
-        const diffTime = Math.abs(today.getTime() - lastDate.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+// Notification Routes
+app.get("/api/notifications", (req, res) => {
+  const { user_id } = req.query;
+  
+  // Check for eligibility and auto-generate notification
+  try {
+    const user = db.prepare("SELECT last_donation_date FROM users WHERE id = ?").get(user_id) as any;
+    if (user && user.last_donation_date) {
+      const lastDate = new Date(user.last_donation_date);
+      const today = new Date();
+      const diffTime = Math.abs(today.getTime() - lastDate.getTime());
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays >= 90) {
+        const existing = db.prepare(
+          "SELECT id FROM notifications WHERE user_id = ? AND type = 'eligibility' AND is_read = 0"
+        ).get(user_id);
         
-        if (diffDays >= 90) {
-          const existing = db.prepare(
-            "SELECT id FROM notifications WHERE user_id = ? AND type = 'eligibility' AND is_read = 0"
-          ).get(user_id);
-          
-          if (!existing) {
-            db.prepare(
-              "INSERT INTO notifications (user_id, type, title, message) VALUES (?, 'eligibility', ?, ?)"
-            ).run(user_id, "🎉 You are eligible!", "It's been 90 days since your last donation. You can save lives again!");
-          }
+        if (!existing) {
+          db.prepare(
+            "INSERT INTO notifications (user_id, type, title, message) VALUES (?, 'eligibility', ?, ?)"
+          ).run(user_id, "🎉 You are eligible!", "It's been 90 days since your last donation. You can save lives again!");
         }
       }
-    } catch (e) {
-      console.error("Eligibility check error", e);
     }
+  } catch (e) {
+    console.error("Eligibility check error", e);
+  }
 
-    const notifications = db.prepare(
-      "SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 20"
-    ).all(user_id);
-    res.json(notifications);
-  });
+  const notifications = db.prepare(
+    "SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 20"
+  ).all(user_id);
+  res.json(notifications);
+});
 
-  app.post("/api/notifications/read", (req, res) => {
-    const { id } = req.body;
-    db.prepare("UPDATE notifications SET is_read = 1 WHERE id = ?").run(id);
-    res.json({ success: true });
-  });
+app.post("/api/notifications/read", (req, res) => {
+  const { id } = req.body;
+  db.prepare("UPDATE notifications SET is_read = 1 WHERE id = ?").run(id);
+  res.json({ success: true });
+});
 
-  // Request Routes
-  app.post("/api/requests/create", (req, res) => {
-    const { requester_id, blood_group, hospital_name, latitude, longitude, is_emergency } = req.body;
-    try {
-      const result = db.prepare(
-        "INSERT INTO blood_requests (requester_id, blood_group, hospital_name, latitude, longitude, is_emergency) VALUES (?, ?, ?, ?, ?, ?)"
-      ).run(requester_id, blood_group, hospital_name, latitude, longitude, is_emergency ? 1 : 0);
-      
-      const requestId = result.lastInsertRowid;
+// Request Routes
+app.post("/api/requests/create", (req, res) => {
+  const { requester_id, blood_group, hospital_name, latitude, longitude, is_emergency } = req.body;
+  try {
+    const result = db.prepare(
+      "INSERT INTO blood_requests (requester_id, blood_group, hospital_name, latitude, longitude, is_emergency) VALUES (?, ?, ?, ?, ?, ?)"
+    ).run(requester_id, blood_group, hospital_name, latitude, longitude, is_emergency ? 1 : 0);
+    
+    const requestId = result.lastInsertRowid;
 
-      // Broadcast notifications to matching donors
-      if (is_emergency) {
-        const donors = db.prepare(
-          "SELECT id FROM users WHERE blood_group = ? AND availability = 1 AND id != ?"
-        ).all(blood_group, requester_id) as { id: number }[];
+    // Broadcast notifications to matching donors
+    if (is_emergency) {
+      const donors = db.prepare(
+        "SELECT id FROM users WHERE blood_group = ? AND availability = 1 AND id != ?"
+      ).all(blood_group, requester_id) as { id: number }[];
 
-        const notifyStmt = db.prepare(
-          "INSERT INTO notifications (user_id, type, title, message, related_id) VALUES (?, 'emergency', ?, ?, ?)"
-        );
+      const notifyStmt = db.prepare(
+        "INSERT INTO notifications (user_id, type, title, message, related_id) VALUES (?, 'emergency', ?, ?, ?)"
+      );
 
-        donors.forEach(donor => {
-          const title = "🚨 EMERGENCY REQUEST";
-          const message = `Urgent ${blood_group} needed at ${hospital_name || 'nearby hospital'}.`;
-          
-          notifyStmt.run(donor.id, title, message, requestId);
-          
-          // Real-time socket notification
-          io.to(`user_${donor.id}`).emit("new_notification", {
-            type: 'emergency',
-            title,
-            message,
-            related_id: requestId,
-            created_at: new Date().toISOString(),
-            is_read: 0
-          });
+      donors.forEach(donor => {
+        const title = "🚨 EMERGENCY REQUEST";
+        const message = `Urgent ${blood_group} needed at ${hospital_name || 'nearby hospital'}.`;
+        
+        notifyStmt.run(donor.id, title, message, requestId);
+        
+        // Real-time socket notification
+        io.to(`user_${donor.id}`).emit("new_notification", {
+          type: 'emergency',
+          title,
+          message,
+          related_id: requestId,
+          created_at: new Date().toISOString(),
+          is_read: 0
         });
-      }
-
-      res.json({ success: true, id: requestId });
-    } catch (error: any) {
-      res.status(500).json({ error: error.message });
-    }
-  });
-
-  app.get("/api/users/:id", (req, res) => {
-    const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.params.id);
-    res.json(user);
-  });
-
-  app.get("/api/stats", (req, res) => {
-    try {
-      const total = db.prepare("SELECT COUNT(*) as count FROM users").get() as { count: number };
-      const available = db.prepare("SELECT COUNT(*) as count FROM users WHERE availability = 1").get() as { count: number };
-      res.json({
-        total: total?.count || 0,
-        available: available?.count || 0
       });
-    } catch (err) {
-      console.error("Stats API error:", err);
-      res.status(500).json({ error: "Failed to fetch stats" });
     }
-  });
 
-  // Error Handler
-  app.use((err: any, req: any, res: any, next: any) => {
-    console.error('Unhandled error:', err);
-    res.status(500).json({ error: 'Internal server error', details: err.message });
-  });
+    res.json({ success: true, id: requestId });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
+app.get("/api/users/:id", (req, res) => {
+  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(req.params.id);
+  res.json(user);
+});
+
+app.get("/api/stats", (req, res) => {
+  try {
+    const total = db.prepare("SELECT COUNT(*) as count FROM users").get() as { count: number };
+    const available = db.prepare("SELECT COUNT(*) as count FROM users WHERE availability = 1").get() as { count: number };
+    res.json({
+      total: total?.count || 0,
+      available: available?.count || 0
+    });
+  } catch (err) {
+    console.error("Stats API error:", err);
+    res.status(500).json({ error: "Failed to fetch stats" });
+  }
+});
+
+// Error Handler
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error('Unhandled error:', err);
+  res.status(500).json({ error: 'Internal server error', details: err.message });
+});
+
+// Production static file serving (for Vercel and production mode)
+if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
+  const distPath = path.join(process.cwd(), "dist");
+  app.use(express.static(distPath));
+  app.get("*", (req, res) => {
+    res.sendFile(path.join(distPath, "index.html"));
+  });
+}
+
+async function startServer() {
+  const PORT = 3000;
+
+  console.log(`Starting server in ${process.env.NODE_ENV || 'development'} mode`);
+  if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
   }
 
   const server = httpServer.listen(PORT, "0.0.0.0", () => {
@@ -373,4 +391,9 @@ async function startServer() {
   });
 }
 
-startServer();
+// For local execution
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export default app;
